@@ -1,0 +1,84 @@
+############################################
+# OS / Editor
+############################################
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+
+############################################
+# PHP / Composer
+############################################
+
+# Composer dependencies
+/vendor/
+
+# Composer local cache / auth
+composer.phar
+auth.json
+
+############################################
+# Environment / Secrets
+############################################
+
+# Docker / App environment variables
+.env
+.env.*
+
+# Okta / OAuth secrets should NEVER be committed
+# (Client ID is public, but keep them together)
+*.pem
+*.key
+
+############################################
+# Dev Containers
+############################################
+
+# Dev Containers runtime data
+.devcontainer/.env
+.devcontainer/docker-compose.override.yml
+
+############################################
+# Docker
+############################################
+
+# Docker runtime / cache
+*.log
+docker-data/
+.docker/
+
+############################################
+# Temporary / Runtime
+############################################
+
+# PHP runtime
+*.pid
+*.cache
+*.tmp
+
+# Session files (if ever stored locally)
+sessions/
+tmp/
+
+############################################
+# Tests / Coverage (if added later)
+############################################
+
+coverage/
+.phpunit.result.cache
+
+############################################
+# WSL / Linux
+############################################
+
+# Vim / nano / editor backups
+*~
+*.swp
+*.swo

@@ -1,0 +1,14 @@
+{
+  "name": "php-okta-oidc",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "service": "php",
+  "workspaceFolder": "/var/www/html",
+  "forwardPorts": [8080],
+  "postCreateCommand": "composer install",
+  "remoteEnv": {
+    "OKTA_ISSUER": "${localEnv:OKTA_ISSUER}",
+    "OKTA_CLIENT_ID": "${localEnv:OKTA_CLIENT_ID}",
+    "OKTA_CLIENT_SECRET": "${localEnv:OKTA_CLIENT_SECRET}",
+    "APP_BASE_URL": "http://localhost:8080"
+  }
+}
