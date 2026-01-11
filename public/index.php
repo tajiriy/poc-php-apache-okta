@@ -29,14 +29,44 @@ $oidc->setRedirectURL($appBaseUrl . '/authorization-code/callback');
 $oidc->addScope(['openid', 'profile', 'email']);
 
 if ($path === '/logout') {
+    // 退避（Oktaへ渡す）
+    $idToken = $_SESSION['id_token'] ?? null;
+
+    // 1) アプリ側セッションを終了
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
     session_destroy();
-    header('Location: /');
+
+    // 2) Oktaセッションも終了（RP-Initiated Logout）
+    // Oktaの end session endpoint に飛ばす
+    // issuer が .../oauth2/default なら、logout は .../oauth2/default/v1/logout が基本形
+    $logoutEndpoint = rtrim($issuer, '/') . '/v1/logout';
+
+    // Oktaは id_token_hint と post_logout_redirect_uri を推奨/要求
+    // post_logout_redirect_uri は Oktaアプリ設定に登録済みであること
+    $params = [
+        'post_logout_redirect_uri' => $appBaseUrl . '/'
+    ];
+    if ($idToken) {
+        $params['id_token_hint'] = $idToken;
+    }
+
+    header('Location: ' . $logoutEndpoint . '?' . http_build_query($params));
     exit;
 }
 
 if ($path === '/authorization-code/callback') {
     // This will exchange the "code" for tokens and validate ID token
     $oidc->authenticate();
+
+    // ★追加：Oktaログアウトに必要
+    $_SESSION['id_token'] = $oidc->getIdToken();
 
     // claims (contains email if scope includes "email")
     $claims = $oidc->getVerifiedClaims();
