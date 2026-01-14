@@ -5,5 +5,9 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Otherwise route to index.php
+# index2.php をテストする場合は以下の行のコメントを切り替え
+# Otherwise route to index.php (jumbojett library version)
 RewriteRule ^ index.php [L]
+
+# Otherwise route to index2.php (pure PHP / SPIRAL compatible version)
+# RewriteRule ^ index2.php [L]
