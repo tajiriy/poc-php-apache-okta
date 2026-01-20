@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hello - Okta OIDC (JavaScript, No .htaccess)</title>
+  <script src="https://global.oktacdn.com/okta-auth-js/7.7.0/okta-auth-js.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    .loading { color: #666; }
+    .error { color: #d32f2f; }
+    a { color: #1976d2; }
+    code { background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
+    button { padding: 8px 12px; }
+    .note { background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <p class="loading">Loading...</p>
+  </div>
+
+  <script>
+    // このファイル自身のパスを取得 (例: /index5.html)
+    const currentPath = window.location.pathname;
+    const baseUrl = window.location.origin + currentPath;
+
+    const config = {
+      issuer: 'https://trial-8821075.okta.com/oauth2/default',
+      clientId: '0oazbggp14P6Nr1G3697',
+      // コールバックURIもログアウト後のリダイレクトURIも、このファイル自身を指定
+      redirectUri: baseUrl,
+      postLogoutRedirectUri: baseUrl,
+      scopes: ['openid', 'profile', 'email']
+    };
+
+    const authClient = new OktaAuth({
+      issuer: config.issuer,
+      clientId: config.clientId,
+      redirectUri: config.redirectUri,
+      scopes: config.scopes,
+      pkce: true,
+      tokenManager: { storage: 'sessionStorage' },
+      storageManager: {
+        token: { storageTypes: ['sessionStorage'] },
+        cache: { storageTypes: ['sessionStorage'] },
+        transaction: { storageTypes: ['sessionStorage'] }
+      }
+    });
+
+    const appDiv = document.getElementById('app');
+
+    // --------------------
+    // helpers
+    // --------------------
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = String(text);
+      return div.innerHTML;
+    }
+
+    function showError(message) {
+      appDiv.innerHTML = `
+        <p class="error">${escapeHtml(message)}</p>
+        <p><button onclick="retry()">Retry</button></p>
+        <p class="loading">Debug:</p>
+        <ul class="loading">
+          <li>path: <code>${escapeHtml(location.pathname)}</code></li>
+          <li>search: <code>${escapeHtml(location.search)}</code></li>
+        </ul>
+      `;
+    }
+
+    function safeClearTransaction() {
+      try {
+        if (authClient.transactionManager && typeof authClient.transactionManager.clear === 'function') {
+          authClient.transactionManager.clear();
+        }
+      } catch (_) {}
+    }
+
+    function retry() {
+      try { authClient.tokenManager.clear(); } catch (_) {}
+      safeClearTransaction();
+      sessionStorage.removeItem('okta_redirect_in_progress');
+      // このファイル自身にリダイレクト（クエリパラメータなし）
+      window.location.replace(currentPath);
+    }
+
+    function urlHasCodeState() {
+      const u = new URL(location.href);
+      return u.searchParams.has('code') && u.searchParams.has('state');
+    }
+
+    // --------------------
+    // main
+    // --------------------
+    async function main() {
+      try {
+        // code/state があればコールバック処理
+        if (urlHasCodeState() || authClient.isLoginRedirect()) {
+          await handleCallback();
+          return;
+        }
+
+        // ?action=logout パラメータでログアウト処理
+        const params = new URLSearchParams(location.search);
+        if (params.get('action') === 'logout') {
+          await handleLogout();
+          return;
+        }
+
+        await handleMainPage();
+      } catch (e) {
+        console.error(e);
+        showError('Authentication error: ' + (e?.message ?? String(e)));
+      }
+    }
+
+    // --------------------
+    // callback
+    // --------------------
+    async function handleCallback() {
+      appDiv.innerHTML = '<p class="loading">Processing authentication...</p>';
+
+      // code/state がない場合はトップへ
+      if (!urlHasCodeState() && !authClient.isLoginRedirect()) {
+        sessionStorage.removeItem('okta_redirect_in_progress');
+        window.location.replace(currentPath);
+        return;
+      }
+
+      try {
+        await authClient.handleLoginRedirect();
+
+        sessionStorage.removeItem('okta_redirect_in_progress');
+
+        // クエリパラメータを削除してこのファイル自身にリダイレクト
+        window.location.replace(currentPath);
+      } catch (e) {
+        console.error('Callback error:', e);
+        safeClearTransaction();
+        sessionStorage.removeItem('okta_redirect_in_progress');
+        showError('Callback error: ' + (e?.message ?? String(e)));
+      }
+    }
+
+    // --------------------
+    // logout
+    // --------------------
+    async function handleLogout() {
+      appDiv.innerHTML = '<p class="loading">Logging out...</p>';
+      try {
+        await authClient.signOut({ postLogoutRedirectUri: config.postLogoutRedirectUri });
+      } catch (e) {
+        authClient.tokenManager.clear();
+        safeClearTransaction();
+        sessionStorage.removeItem('okta_redirect_in_progress');
+        window.location.replace(currentPath);
+      }
+    }
+
+    // --------------------
+    // main page
+    // --------------------
+    async function handleMainPage() {
+      const idToken = await authClient.tokenManager.get('idToken');
+
+      if (!idToken) {
+        // 二重リダイレクト防止
+        if (sessionStorage.getItem('okta_redirect_in_progress') === '1') {
+          appDiv.innerHTML = '<p class="loading">Redirect already in progress...</p>';
+          return;
+        }
+
+        appDiv.innerHTML = '<p class="loading">Redirecting to login...</p>';
+
+        // 元のURIとしてこのファイル自身を保存
+        try { authClient.setOriginalUri(baseUrl); } catch (_) {}
+
+        safeClearTransaction();
+
+        sessionStorage.setItem('okta_redirect_in_progress', '1');
+        await authClient.signInWithRedirect();
+        return;
+      }
+
+      const claims = idToken.claims || {};
+      const email = escapeHtml(claims.email || '(no email claim)');
+      const name = escapeHtml(claims.name || '');
+
+      // ログアウトリンクは ?action=logout パラメータを使用
+      const logoutUrl = currentPath + '?action=logout';
+
+      appDiv.innerHTML = `
+        <p>Hello, ${email} さん!</p>
+        ${name ? `<p>Name: ${name}</p>` : ''}
+        <p><a href="${logoutUrl}">Logout</a></p>
+        <div class="note">
+          <strong>Note:</strong> This page works without .htaccess.<br>
+          Callback URI: <code>${escapeHtml(config.redirectUri)}</code>
+        </div>
+      `;
+    }
+
+    main();
+  </script>
+</body>
+</html>
