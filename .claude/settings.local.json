@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(xargs:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "WebSearch",
+      "WebFetch(domain:developer.okta.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
