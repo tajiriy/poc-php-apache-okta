@@ -98,6 +98,50 @@
     }
 
     // --------------------
+    // SPIRAL settings
+    // --------------------
+    const SPIRAL = {
+      loginUrl: 'https://area34.smp.ne.jp/area/Login',
+      // ここはあなたが貼ってくれた hidden の値をそのまま
+      areaKey: 'qjte-lbkcqj-a0b8925c31a0919c5878c69d8a199cfe',
+      // 同一タブでの二重submit防止用キー
+      onceKey: 'spiral_autosubmit_done'
+    };
+
+    function postToSpiralLogin(smpid) {
+      // すでに送っているなら何もしない（ループ/連打防止）
+      if (sessionStorage.getItem(SPIRAL.onceKey) === '1') return;
+
+      // smpid が空なら送らない
+      if (!smpid || typeof smpid !== 'string') return;
+
+      // “送った”フラグを先に立てる（送信直前にエラーが出てもループしにくい）
+      sessionStorage.setItem(SPIRAL.onceKey, '1');
+
+      // フォームをDOM上に生成して submit
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = SPIRAL.loginUrl;
+      form.autocomplete = 'off';
+
+      const inputSmpid = document.createElement('input');
+      inputSmpid.type = 'hidden';
+      inputSmpid.name = 'SMPID';
+      inputSmpid.value = smpid;
+
+      const inputArea = document.createElement('input');
+      inputArea.type = 'hidden';
+      inputArea.name = 'SMPAREA';
+      inputArea.value = SPIRAL.areaKey;
+
+      form.appendChild(inputSmpid);
+      form.appendChild(inputArea);
+
+      document.body.appendChild(form);
+      form.submit();
+    }
+
+    // --------------------
     // main
     // --------------------
     async function main() {
@@ -191,10 +235,18 @@
       }
 
       const claims = idToken.claims || {};
-      const email = escapeHtml(claims.email || '(no email claim)');
-      const name = escapeHtml(claims.name || '');
+      const rawEmail = claims.email || '';
 
-      // ログアウトリンクは ?action=logout パラメータを使用
+      // ★ここで SPIRAL に自動POST（emailが取れたら即遷移）
+      if (rawEmail) {
+        appDiv.innerHTML = '<p class="loading">Signing in to SPIRAL...</p>';
+        postToSpiralLogin(rawEmail);
+        return; // 以降の表示は基本的に不要（遷移するため）
+      }
+
+      // email が無いなど、送れない場合だけ画面表示（フォールバック）
+      const email = escapeHtml(rawEmail || '(no email claim)');
+      const name = escapeHtml(claims.name || '');
       const logoutUrl = currentPath + '?action=logout';
 
       appDiv.innerHTML = `
@@ -202,7 +254,7 @@
         ${name ? `<p>Name: ${name}</p>` : ''}
         <p><a href="${logoutUrl}">Logout</a></p>
         <div class="note">
-          <strong>Note:</strong> This page works without .htaccess.<br>
+          <strong>Note:</strong> Could not auto-submit to SPIRAL (no email).<br>
           Callback URI: <code>${escapeHtml(config.redirectUri)}</code>
         </div>
       `;
